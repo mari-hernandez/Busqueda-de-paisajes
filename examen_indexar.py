@@ -31,7 +31,7 @@ def examen_indexar(dir_dataset_r, dir_datos_temporales):
         if not archivo.endswith(".jpg"):
             continue
 
-        filename = dir_dataset_r+'\\'+archivo
+        filename = os.path.join(dir_dataset_r, archivo)
         img_color = cv2.imread(filename, cv2.IMREAD_COLOR)
 
         descriptores = desc.descriptores_full(img_color)
@@ -50,12 +50,12 @@ def examen_indexar(dir_dataset_r, dir_datos_temporales):
 
     os.makedirs(dir_datos_temporales, exist_ok=True)
 
-    f= open(str(dir_datos_temporales)+"\\nombres.txt","w+")
+    f = open(os.path.join(dir_datos_temporales, 'nombres.txt'), 'w+')
     for nombre in lista_nombres:
         f.write(nombre+"\n")
     f.close()
 
-    numpy.savetxt(str(dir_datos_temporales)+"\data.txt",matriz_descriptores,fmt='%s')
+    numpy.savetxt(os.path.join(dir_datos_temporales, 'data.txt'),matriz_descriptores,fmt='%s')
 
 
 # Inicio de la ejecución
