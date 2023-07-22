@@ -2,8 +2,10 @@
 # 24 de julio de 2023
 # Alumnos: María Hernández - José Triviño
 
+import json
 import sys
 import os.path
+import time
 import cv2
 import numpy
 import scipy.spatial
@@ -40,8 +42,45 @@ def resize_img(img_path, border=False, show=False):
     
     return border_canvas
 
+def crear_rectangulo_con_texto(ancho, texto):
+    """
+    Crea un rectángulo blanco del ancho indicado 
+    con el texto indicado en su interior.
+    """
+    canvas = numpy.ones((40, ancho, 3), dtype=numpy.uint8) * 255
+    cv2.putText(canvas, texto, (5, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1, cv2.LINE_AA)
+    return canvas
 
-def examen_buscar(images_dir, dir_dataset_q, dir_datos_temporales, file_resultados, one_img = None):
+def calcular_descriptores_q(archivo, dir_dataset_q):
+    """
+    Calcula los descriptores de la imagen de consulta.
+    """
+    filename = os.path.join(dir_dataset_q, archivo)
+    img_color = cv2.imread(filename, cv2.IMREAD_COLOR)
+    descriptores_imagen = desc.descriptores_full(img_color)
+    return descriptores_imagen
+
+def imagen_con_texto(path, texto='Imagen de consulta'):
+    """
+    Lee la imagen en la ruta indicada y la concatena con un rectángulo con texto.
+    """
+    resize = resize_img(path)
+    risize_con_texto = cv2.vconcat([resize, crear_rectangulo_con_texto(resize.shape[1], texto)])
+    return risize_con_texto
+    
+
+def examen_buscar(images_dir, json_descripcion, dir_dataset_q, dir_datos_temporales, file_resultados, one_img = None):
+    """
+    Busca las 5 imágenes más cercanas a la imagen de consulta.
+
+    Parametros:
+        images_dir -- directorio de imágenes (dataset inicial)
+        json_descripcion -- archivo json con descripciones de imágenes
+        dir_dataset_q -- directorio de imágenes de consulta
+        dir_datos_temporales -- directorio de datos temporales (descriptores)
+        file_resultados -- archivo donde se escribirán los resultados
+        one_img -- nombre de la imagen de consulta (opcional)
+    """
 
     # Revisión de directorios
     if not os.path.isdir(dir_dataset_q):
@@ -59,7 +98,6 @@ def examen_buscar(images_dir, dir_dataset_q, dir_datos_temporales, file_resultad
             return
     
     # Calcular descriptores de la imagen buscada
-    
     lista_nombres = []
     matriz_descriptores = []
 
@@ -67,12 +105,7 @@ def examen_buscar(images_dir, dir_dataset_q, dir_datos_temporales, file_resultad
         for archivo in os.listdir(dir_dataset_q):
             if not archivo.endswith(".jpg"):
                 continue
-
-            filename = os.path.join(dir_dataset_q, archivo)
-            img_color = cv2.imread(filename, cv2.IMREAD_COLOR)
-
-            descriptores_imagen = desc.descriptores_full(img_color)
-
+            descriptores_imagen = calcular_descriptores_q(archivo, dir_dataset_q)
             # agregar descriptor a la matriz de descriptores
             if len(matriz_descriptores) == 0:
                 matriz_descriptores = descriptores_imagen
@@ -83,30 +116,23 @@ def examen_buscar(images_dir, dir_dataset_q, dir_datos_temporales, file_resultad
             lista_nombres.append(archivo)
         
     else:
-        filename = os.path.join(dir_dataset_q, one_img)
-        img_color = cv2.imread(filename, cv2.IMREAD_COLOR)
-
-        descriptores_imagen = desc.descriptores_full(img_color)
-
-        # agregar descriptor a la matriz de descriptores
-        if len(matriz_descriptores) == 0:
-            matriz_descriptores = descriptores_imagen
-        else:
-            matriz_descriptores = numpy.vstack([matriz_descriptores, descriptores_imagen])
+        matriz_descriptores = calcular_descriptores_q(archivo, dir_dataset_q)
 
         # agregar nombre del archivo a la lista de nombres
         lista_nombres.append(one_img)
 
     #  2-leer descriptores de R de dir_datos_temporales
-
     descriptores = numpy.loadtxt(os.path.join(dir_datos_temporales, "data.txt"))
 
     #  3-para cada descriptor q localizar el mas cercano en R
-
     if len(matriz_descriptores.shape) == 1:
-        matriz_distancias = scipy.spatial.distance.cdist([matriz_descriptores], descriptores, metric='cityblock')
-    else:
-        matriz_distancias = scipy.spatial.distance.cdist(matriz_descriptores, descriptores, metric='cityblock')
+        matriz_descriptores = [matriz_descriptores]
+
+    matriz_distancias = scipy.spatial.distance.cdist(matriz_descriptores, descriptores, metric='cityblock')
+
+    # leer json metadata
+    with open(json_descripcion) as json_file:
+        metadata = json.load(json_file)
 
     #  4-escribir en file_resultados
     f= open(file_resultados,"w+")
@@ -121,51 +147,53 @@ def examen_buscar(images_dir, dir_dataset_q, dir_datos_temporales, file_resultad
         nearest_indices = sorted_indices[:5]
 
         ref_path = os.path.join(dir_dataset_q, lista_nombres[i])
-        ref_resized = resize_img(ref_path, True)
-        row_2 = []
-        
+        ref_reseze_con_texto = imagen_con_texto(ref_path)
+
+        ret = [ref_reseze_con_texto]
         for count, best_j in enumerate(nearest_indices):
-            f.write(lista_nombres[i] + "\t" + nombres_r[best_j] + "\t" + str(distancias[best_j]) + "\n")
-            best_path = os.path.join(images_dir, nombres_r[best_j])
-            best_resized = resize_img(best_path)
-            if count == 2:
-                row_2 = best_resized
-            elif count > 2:
-                row_2 = numpy.concatenate((row_2, best_resized), axis=1)
-            else:
-                ref_resized = numpy.concatenate((ref_resized, best_resized), axis=1)
-            if count == 4:
-                ref_resized = numpy.concatenate((ref_resized, row_2), axis=0)
-        
+            nombre_imagen_jpg = nombres_r[best_j]
+            nombre_imagen_sin_ext = nombre_imagen_jpg.split('.')[0]
+            descripcion = metadata[nombre_imagen_sin_ext]
+
+            f.write(lista_nombres[i] + "\t" + nombre_imagen_jpg + "\t" + str(distancias[best_j]) +"\t"+descripcion + "\n")
+            best_path = os.path.join(images_dir, nombre_imagen_jpg)
+            best_resized_con_texto = imagen_con_texto(best_path, descripcion)
+            ret.append(best_resized_con_texto)
+
         if one_img:
-            cv2.imshow("Resultados", ref_resized)
-            cv2.waitKey(0)
+            busqueda_concatenada = cv2.hconcat(ret)
+            cv2.imshow("Resultados", busqueda_concatenada)
+            cv2.waitKey(1)
             cv2.destroyAllWindows()
     
     f.close()
     n.close()
 
 # Inicio de la ejecución
-if len(sys.argv) < 4:
+if len(sys.argv) < 5:
     print("Uso: {} [dir_dataset_q] [dir_datos_temporales] [resultados.txt]".format(sys.argv[0]))
     sys.exit(1)
 
-elif len(sys.argv) >= 4:
+elif len(sys.argv) >= 5:
     images_dir = sys.argv[1]
-    dir_dataset_q = sys.argv[2]
-    dir_datos_temporales = sys.argv[3]
-    file_resultados = sys.argv[4]
+    json_descripcion = sys.argv[2]
+    dir_dataset_q = sys.argv[3]
+    dir_datos_temporales = sys.argv[4]
+    file_resultados = sys.argv[5]
 
     if os.path.exists(file_resultados):
         os.remove(file_resultados)
 
-    if len(sys.argv) == 5:
-        examen_buscar(images_dir, dir_dataset_q, dir_datos_temporales, file_resultados)
+    if len(sys.argv) == 6:
+        examen_buscar(images_dir, json_descripcion, dir_dataset_q, dir_datos_temporales, file_resultados)
 
     else:
         while True:
             img_name = input("Ingrese nombre de archivo: ")
-            examen_buscar(images_dir, dir_dataset_q, dir_datos_temporales, file_resultados, img_name)
+            inicio = time.time()
+            examen_buscar(images_dir, json_descripcion,dir_dataset_q, dir_datos_temporales, file_resultados, img_name)
+            fin = time.time()
+            print("Tiempo de ejecución: {} segundos".format(fin-inicio))
             continuar = input("Desea buscar otra imagen? (y/n): ")
             if continuar == "n":
                 break

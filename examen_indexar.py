@@ -4,6 +4,7 @@
 
 import sys
 import os.path
+import time
 import examen_descriptores as desc
 import numpy
 import cv2
@@ -66,4 +67,7 @@ if len(sys.argv) < 3:
 dir_dataset_r = sys.argv[1]
 dir_datos_temporales = sys.argv[2]
 
+inicio = time.time()
 examen_indexar(dir_dataset_r, dir_datos_temporales)
+fin = time.time()
+print("Tiempo de ejecución: {} segundos".format(fin - inicio))
