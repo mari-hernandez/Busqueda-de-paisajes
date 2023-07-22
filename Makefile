@@ -7,4 +7,7 @@ indexar:
 		python3 examen_indexar.py archive temp
 
 buscar:
-	python examen_buscar.py archive q temp similar con-input
+	python examen_buscar.py archive new_metadata.json q temp similar con-input
+
+buscar-toda-carpeta:
+	python examen_buscar.py archive new_metadata.json q temp similar
