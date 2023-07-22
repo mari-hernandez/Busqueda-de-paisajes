@@ -41,7 +41,7 @@ def resize_img(img_path, border=False, show=False):
     return border_canvas
 
 
-def tarea1_buscar(dir_dataset_q, dir_datos_temporales, file_resultados, one_img = None):
+def examen_buscar(images_dir, dir_dataset_q, dir_datos_temporales, file_resultados, one_img = None):
 
     # Revisión de directorios
     if not os.path.isdir(dir_dataset_q):
@@ -50,25 +50,25 @@ def tarea1_buscar(dir_dataset_q, dir_datos_temporales, file_resultados, one_img 
     elif not os.path.isdir(dir_datos_temporales):
         print("ERROR: no existe directorio {}".format(dir_datos_temporales))
         sys.exit(1)
-    '''
-    elif os.path.exists(file_resultados):
-        print("ERROR: ya existe archivo {}".format(file_resultados))
+    elif not os.path.isdir(images_dir):
+        print("ERROR: no existe directorio {}".format(images_dir))
         sys.exit(1)
-    '''
-
+    if one_img:
+        if not os.path.isfile(os.path.join(dir_dataset_q, one_img)):
+            print("ERROR: no existe archivo {}".format(one_img))
+            return
+    
     # Calcular descriptores de la imagen buscada
     
     lista_nombres = []
     matriz_descriptores = []
 
     if not one_img:
-
         for archivo in os.listdir(dir_dataset_q):
-
             if not archivo.endswith(".jpg"):
                 continue
 
-            filename = dir_dataset_q+'\\'+archivo
+            filename = os.path.join(dir_dataset_q, archivo)
             img_color = cv2.imread(filename, cv2.IMREAD_COLOR)
 
             descriptores_imagen = desc.descriptores_full(img_color)
@@ -83,7 +83,7 @@ def tarea1_buscar(dir_dataset_q, dir_datos_temporales, file_resultados, one_img 
             lista_nombres.append(archivo)
         
     else:
-        filename = dir_dataset_q+'\\'+one_img
+        filename = os.path.join(dir_dataset_q, one_img)
         img_color = cv2.imread(filename, cv2.IMREAD_COLOR)
 
         descriptores_imagen = desc.descriptores_full(img_color)
@@ -99,7 +99,7 @@ def tarea1_buscar(dir_dataset_q, dir_datos_temporales, file_resultados, one_img 
 
     #  2-leer descriptores de R de dir_datos_temporales
 
-    descriptores = numpy.loadtxt(str(dir_datos_temporales)+"\data.txt")
+    descriptores = numpy.loadtxt(os.path.join(dir_datos_temporales, "data.txt"))
 
     #  3-para cada descriptor q localizar el mas cercano en R
 
@@ -110,7 +110,7 @@ def tarea1_buscar(dir_dataset_q, dir_datos_temporales, file_resultados, one_img 
 
     #  4-escribir en file_resultados
     f= open(file_resultados,"w+")
-    n= open(str(dir_datos_temporales)+"\\nombres.txt","r")
+    n= open(os.path.join(dir_datos_temporales, "nombres.txt"),"r")
     nombres_r = n.read().splitlines()
 
     for i in range(len(matriz_distancias)): # Datos q
@@ -120,13 +120,13 @@ def tarea1_buscar(dir_dataset_q, dir_datos_temporales, file_resultados, one_img 
         # Se obtienen los 5 vecinos más cercanos
         nearest_indices = sorted_indices[:5]
 
-        ref_path = dir_dataset_q + "\\" + lista_nombres[i]
+        ref_path = os.path.join(dir_dataset_q, lista_nombres[i])
         ref_resized = resize_img(ref_path, True)
         row_2 = []
         
         for count, best_j in enumerate(nearest_indices):
             f.write(lista_nombres[i] + "\t" + nombres_r[best_j] + "\t" + str(distancias[best_j]) + "\n")
-            best_path = "C:\\Users\\josem\\OneDrive\\Escritorio\\ExamenRIM\\paisajes\\" + nombres_r[best_j]
+            best_path = os.path.join(images_dir, nombres_r[best_j])
             best_resized = resize_img(best_path)
             if count == 2:
                 row_2 = best_resized
@@ -134,7 +134,6 @@ def tarea1_buscar(dir_dataset_q, dir_datos_temporales, file_resultados, one_img 
                 row_2 = numpy.concatenate((row_2, best_resized), axis=1)
             else:
                 ref_resized = numpy.concatenate((ref_resized, best_resized), axis=1)
-
             if count == 4:
                 ref_resized = numpy.concatenate((ref_resized, row_2), axis=0)
         
@@ -152,14 +151,24 @@ if len(sys.argv) < 4:
     sys.exit(1)
 
 elif len(sys.argv) >= 4:
-    dir_dataset_q = sys.argv[1]
-    dir_datos_temporales = sys.argv[2]
-    file_resultados = sys.argv[3]
+    images_dir = sys.argv[1]
+    dir_dataset_q = sys.argv[2]
+    dir_datos_temporales = sys.argv[3]
+    file_resultados = sys.argv[4]
 
-    if len(sys.argv) == 4:
-        tarea1_buscar(dir_dataset_q, dir_datos_temporales, file_resultados)
+    if os.path.exists(file_resultados):
+        os.remove(file_resultados)
+
+    if len(sys.argv) == 5:
+        examen_buscar(images_dir, dir_dataset_q, dir_datos_temporales, file_resultados)
 
     else:
         while True:
             img_name = input("Ingrese nombre de archivo: ")
-            tarea1_buscar(dir_dataset_q, dir_datos_temporales, file_resultados, img_name)
+            examen_buscar(images_dir, dir_dataset_q, dir_datos_temporales, file_resultados, img_name)
+            continuar = input("Desea buscar otra imagen? (y/n): ")
+            if continuar == "n":
+                break
+            elif continuar == "y":
+                os.remove(file_resultados)
+                continue
